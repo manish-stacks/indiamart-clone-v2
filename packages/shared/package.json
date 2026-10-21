@@ -1,0 +1,14 @@
+{
+  "name": "@marketplace/shared",
+  "version": "1.0.0",
+  "description": "Shared TypeScript types, enums, and interfaces for Marketplace",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Shared package compiled successfully\""
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

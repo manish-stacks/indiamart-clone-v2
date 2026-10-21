@@ -1,0 +1,671 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================================================================
+// IDENTITY & RBAC
+// ============================================================================
+
+enum UserAccountStatus {
+  ACTIVE
+  PENDING_VERIFY
+  SUSPENDED
+}
+
+model User {
+  id               String            @id @default(uuid())
+  email            String            @unique
+  phone            String?           @unique
+  passwordHash     String
+  fullName         String
+  avatarUrl        String?
+  status           UserAccountStatus @default(ACTIVE)
+  emailVerified    Boolean           @default(false)
+  phoneVerified    Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  roles            UserRole[]
+  sessions         Session[]
+  businessMembers  BusinessMember[]
+  buyerInquiries   Inquiry[]         @relation("BuyerInquiries")
+  buyerRequirements Requirement[]    @relation("BuyerRequirements")
+  buyerOrders      Order[]           @relation("BuyerOrders")
+  buyerQuotations  Quotation[]       @relation("BuyerQuotations")
+  carts            Cart[]
+  supportTickets   SupportTicket[]   @relation("RequesterTickets")
+  assignedTickets  SupportTicket[]   @relation("AgentTickets")
+  auditLogs        AuditLog[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  createdAt   DateTime   @default(now())
+  userRoles   UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  refreshToken String   @db.VarChar(512)
+  userAgent    String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model OtpAttempt {
+  id           String   @id @default(uuid())
+  recipient    String
+  otpHash      String
+  purpose      String
+  attempts     Int      @default(0)
+  isUsed       Boolean  @default(false)
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([recipient, purpose])
+  @@map("otp_attempts")
+}
+
+// ============================================================================
+// BUSINESS PROFILES & VERIFICATION
+// ============================================================================
+
+enum BusinessType {
+  MANUFACTURER
+  WHOLESALER
+  DISTRIBUTOR
+  EXPORTER
+  IMPORTER
+  SERVICE_PROVIDER
+  RETAILER
+}
+
+enum VerificationStatus {
+  PENDING
+  UNDER_REVIEW
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum BusinessMemberRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+model Business {
+  id                 String             @id @default(uuid())
+  name               String
+  slug               String             @unique
+  legalName          String?
+  gstin              String?            @unique
+  businessType       BusinessType       @default(MANUFACTURER)
+  verificationStatus VerificationStatus @default(PENDING)
+  description        String?            @db.Text
+  logoUrl            String?
+  bannerUrl          String?
+  yearEstablished    Int?
+  trustScore         Decimal            @default(4.50) @db.Decimal(3, 2)
+  responseTimeHours  Int                @default(4)
+  gstinVerified      Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  members            BusinessMember[]
+  addresses          BusinessAddress[]
+  documents          BusinessDocument[]
+  products           Product[]
+  inquiriesReceived  Inquiry[]          @relation("BusinessInquiries")
+  quotationsIssued   Quotation[]        @relation("BusinessQuotations")
+  ordersFulfilled    Order[]            @relation("BusinessOrders")
+  leads              Lead[]             @relation("BusinessLeads")
+  requirementQuotes  RequirementResponse[]
+
+  @@index([slug])
+  @@index([verificationStatus])
+  @@map("businesses")
+}
+
+model BusinessMember {
+  id         String             @id @default(uuid())
+  businessId String
+  userId     String
+  role       BusinessMemberRole @default(STAFF)
+  createdAt  DateTime           @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, userId])
+  @@index([businessId])
+  @@index([userId])
+  @@map("business_members")
+}
+
+model BusinessAddress {
+  id         String   @id @default(uuid())
+  businessId String
+  street     String
+  city       String
+  state      String
+  postalCode String
+  country    String   @default("India")
+  isPrimary  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([city, state])
+  @@map("business_addresses")
+}
+
+model BusinessDocument {
+  id           String             @id @default(uuid())
+  businessId   String
+  docType      String
+  fileUrl      String
+  status       VerificationStatus @default(PENDING)
+  verifiedAt   DateTime?
+  rejectionReason String?
+  createdAt    DateTime           @default(now())
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@map("business_documents")
+}
+
+// ============================================================================
+// CATALOGUE: CATEGORIES & PRODUCTS
+// ============================================================================
+
+enum ProductStatus {
+  DRAFT
+  PENDING_APPROVAL
+  PUBLISHED
+  ARCHIVED
+}
+
+enum UnitOfMeasure {
+  PIECE
+  BOX
+  CARTON
+  TON
+  KG
+  GRAM
+  METER
+  SQUARE_METER
+  LITRE
+  SET
+  PACK
+  HOUR
+}
+
+model Category {
+  id           String     @id @default(uuid())
+  name         String
+  slug         String     @unique
+  description  String?
+  imageUrl     String?
+  icon         String?
+  parentId     String?
+  displayOrder Int        @default(0)
+  createdAt    DateTime   @default(now())
+
+  parent       Category?  @relation("SubCategories", fields: [parentId], references: [id], onDelete: SetNull)
+  children     Category[] @relation("SubCategories")
+  products     Product[]
+  requirements Requirement[]
+
+  @@index([slug])
+  @@index([parentId])
+  @@map("categories")
+}
+
+model Product {
+  id               String        @id @default(uuid())
+  businessId       String
+  categoryId       String
+  name             String
+  slug             String        @unique
+  description      String?       @db.Text
+  status           ProductStatus @default(PUBLISHED)
+  minOrderQuantity Int           @default(1)
+  unitOfMeasure    UnitOfMeasure @default(PIECE)
+  unitPrice        Decimal       @db.Decimal(12, 2)
+  isB2B            Boolean       @default(true)
+  isB2C            Boolean       @default(false)
+  sku              String?
+  specifications   Json?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  business         Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category         Category      @relation(fields: [categoryId], references: [id])
+  images           ProductImage[]
+  priceTiers       PriceTier[]
+  cartItems        CartItem[]
+  orderItems       OrderItem[]
+  inquiries        Inquiry[]
+  quotationItems   QuotationItem[]
+
+  @@index([businessId])
+  @@index([categoryId])
+  @@index([status])
+  @@map("products")
+}
+
+model ProductImage {
+  id           String   @id @default(uuid())
+  productId    String
+  url          String
+  altText      String?
+  displayOrder Int      @default(0)
+  isPrimary    Boolean  @default(false)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+model PriceTier {
+  id          String   @id @default(uuid())
+  productId   String
+  minQuantity Int
+  maxQuantity Int?
+  price       Decimal  @db.Decimal(12, 2)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("price_tiers")
+}
+
+// ============================================================================
+// B2B RFQ, INQUIRIES & QUOTATIONS
+// ============================================================================
+
+enum RequirementStatus {
+  OPEN
+  UNDER_REVIEW
+  QUOTES_RECEIVED
+  MATCHED
+  CLOSED
+  EXPIRED
+}
+
+model Requirement {
+  id            String            @id @default(uuid())
+  buyerId       String
+  categoryId    String
+  title         String
+  description   String            @db.Text
+  quantity      Int
+  unitOfMeasure UnitOfMeasure     @default(PIECE)
+  targetPrice   Decimal?          @db.Decimal(12, 2)
+  deliveryCity  String
+  deliveryState String
+  status        RequirementStatus @default(OPEN)
+  expiresAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  buyer     User                  @relation("BuyerRequirements", fields: [buyerId], references: [id], onDelete: Cascade)
+  category  Category              @relation(fields: [categoryId], references: [id])
+  responses RequirementResponse[]
+  inquiries Inquiry[]
+
+  @@index([buyerId])
+  @@index([categoryId])
+  @@index([status])
+  @@map("requirements")
+}
+
+model RequirementResponse {
+  id            String      @id @default(uuid())
+  requirementId String
+  businessId    String
+  message       String      @db.Text
+  offeredPrice  Decimal?    @db.Decimal(12, 2)
+  createdAt     DateTime    @default(now())
+
+  requirement Requirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  business    Business    @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([requirementId, businessId])
+  @@map("requirement_responses")
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  QUOTED
+  WON
+  LOST
+}
+
+model Inquiry {
+  id            String        @id @default(uuid())
+  buyerId       String
+  businessId    String
+  productId     String?
+  requirementId String?
+  message       String        @db.Text
+  quantity      Int           @default(1)
+  unitOfMeasure UnitOfMeasure @default(PIECE)
+  status        InquiryStatus @default(NEW)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  buyer       User         @relation("BuyerInquiries", fields: [buyerId], references: [id], onDelete: Cascade)
+  business    Business     @relation("BusinessInquiries", fields: [businessId], references: [id], onDelete: Cascade)
+  product     Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  requirement Requirement? @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+  quotations  Quotation[]
+  leads       Lead[]
+
+  @@index([buyerId])
+  @@index([businessId])
+  @@index([status])
+  @@map("inquiries")
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  VIEWED
+  ACCEPTED
+  REJECTED
+  REVISED
+  EXPIRED
+}
+
+model Quotation {
+  id             String          @id @default(uuid())
+  inquiryId      String?
+  businessId     String
+  buyerId        String
+  quoteNumber    String          @unique
+  subtotal       Decimal         @db.Decimal(12, 2)
+  taxAmount      Decimal         @default(0.00) @db.Decimal(12, 2)
+  shippingAmount Decimal         @default(0.00) @db.Decimal(12, 2)
+  totalAmount    Decimal         @db.Decimal(12, 2)
+  paymentTerms   String?
+  validityDate   DateTime?
+  status         QuotationStatus @default(SENT)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  inquiry   Inquiry?        @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  business  Business        @relation("BusinessQuotations", fields: [businessId], references: [id], onDelete: Cascade)
+  buyer     User            @relation("BuyerQuotations", fields: [buyerId], references: [id], onDelete: Cascade)
+  items     QuotationItem[]
+
+  @@index([businessId])
+  @@index([buyerId])
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id            String        @id @default(uuid())
+  quotationId   String
+  productId     String?
+  description   String
+  quantity      Int
+  unitOfMeasure UnitOfMeasure @default(PIECE)
+  unitPrice     Decimal       @db.Decimal(12, 2)
+  totalAmount   Decimal       @db.Decimal(12, 2)
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product   Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([quotationId])
+  @@map("quotation_items")
+}
+
+// ============================================================================
+// SELLER CRM & LEADS
+// ============================================================================
+
+enum LeadStage {
+  NEW
+  CONTACTED
+  QUALIFIED
+  QUOTATION_SENT
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum LeadPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Lead {
+  id               String       @id @default(uuid())
+  businessId       String
+  inquiryId        String?
+  buyerName        String
+  buyerPhone       String?
+  buyerEmail       String?
+  stage            LeadStage    @default(NEW)
+  priority         LeadPriority @default(MEDIUM)
+  estimatedValue   Decimal?     @db.Decimal(12, 2)
+  assignedToUserId String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  business Business   @relation("BusinessLeads", fields: [businessId], references: [id], onDelete: Cascade)
+  inquiry  Inquiry?   @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  notes    LeadNote[]
+
+  @@index([businessId])
+  @@index([stage])
+  @@map("leads")
+}
+
+model LeadNote {
+  id        String   @id @default(uuid())
+  leadId    String
+  authorId  String
+  note      String   @db.Text
+  createdAt DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_notes")
+}
+
+// ============================================================================
+// B2C COMMERCE & ORDERS
+// ============================================================================
+
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String?
+  sessionId String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  user  User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  @@index([userId])
+  @@index([sessionId])
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  productId String
+  quantity  Int      @default(1)
+  unitPrice Decimal  @db.Decimal(12, 2)
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([cartId])
+  @@index([productId])
+  @@map("cart_items")
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  RETURN_REQUESTED
+  RETURNED
+  REFUND_PENDING
+  REFUNDED
+}
+
+enum PaymentStatus {
+  INITIATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+model Order {
+  id                 String        @id @default(uuid())
+  orderNumber        String        @unique
+  buyerId            String
+  businessId         String
+  status             OrderStatus   @default(PENDING_PAYMENT)
+  totalAmount        Decimal       @db.Decimal(12, 2)
+  shippingAddressJson Json
+  paymentStatus      PaymentStatus @default(INITIATED)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  buyer    User        @relation("BuyerOrders", fields: [buyerId], references: [id], onDelete: Cascade)
+  business Business    @relation("BusinessOrders", fields: [businessId], references: [id], onDelete: Cascade)
+  items    OrderItem[]
+
+  @@index([buyerId])
+  @@index([businessId])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  orderId    String
+  productId  String
+  quantity   Int
+  unitPrice  Decimal  @db.Decimal(12, 2)
+  totalPrice Decimal  @db.Decimal(12, 2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+// ============================================================================
+// SUPPORT & AUDIT
+// ============================================================================
+
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  WAITING_FOR_USER
+  ESCALATED
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model SupportTicket {
+  id              String         @id @default(uuid())
+  ticketNumber    String         @unique
+  requesterId     String
+  category        String
+  subject         String
+  description     String         @db.Text
+  priority        TicketPriority @default(MEDIUM)
+  status          TicketStatus   @default(OPEN)
+  assignedAgentId String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  requester User  @relation("RequesterTickets", fields: [requesterId], references: [id], onDelete: Cascade)
+  agent     User? @relation("AgentTickets", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+
+  @@index([requesterId])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  action      String
+  entity      String
+  entityId    String?
+  detailsJson Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
