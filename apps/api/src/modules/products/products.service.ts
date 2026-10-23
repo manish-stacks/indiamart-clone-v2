@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { SearchProductDto } from './dto/search-product.dto';
@@ -32,11 +32,11 @@ export class ProductsService {
           name: dto.name,
           slug,
           description: dto.description,
-          minOrderQuantity: dto.minOrderQuantity,
+          minOrderQuantity: Number(dto.minOrderQuantity || 1),
           unitOfMeasure: dto.unitOfMeasure,
-          unitPrice: dto.unitPrice,
-          isB2B: dto.isB2B ?? true,
-          isB2C: dto.isB2C ?? false,
+          unitPrice: Number(dto.unitPrice || 0),
+          isB2B: dto.isB2B !== undefined ? Boolean(dto.isB2B) : true,
+          isB2C: dto.isB2C !== undefined ? Boolean(dto.isB2C) : false,
           sku: dto.sku,
           specifications: dto.specifications || {},
           status: ProductStatus.PUBLISHED,
@@ -286,6 +286,259 @@ export class ProductsService {
         unitPrice: Number(sp.unitPrice),
         primaryImage: sp.images[0]?.url || null,
       })),
+    };
+  }
+
+  async getSellerProducts(userId: string, query?: { status?: string; search?: string }) {
+    const memberships = await this.prisma.businessMember.findMany({
+      where: { userId },
+      select: { businessId: true },
+    });
+    const businessIds = memberships.map((m) => m.businessId);
+    if (businessIds.length === 0) return [];
+
+    const where: any = {
+      businessId: { in: businessIds },
+    };
+
+    if (query?.status && query.status !== 'ALL') {
+      where.status = query.status;
+    }
+
+    if (query?.search) {
+      where.OR = [
+        { name: { contains: query.search } },
+        { sku: { contains: query.search } },
+      ];
+    }
+
+    return this.prisma.product.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        category: { select: { id: true, name: true, slug: true } },
+        images: { orderBy: { displayOrder: 'asc' } },
+        priceTiers: { orderBy: { minQuantity: 'asc' } },
+        business: { select: { id: true, name: true, slug: true } },
+        _count: {
+          select: { inquiries: true },
+        },
+      },
+    });
+  }
+
+  async update(productId: string, userId: string, dto: any) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      include: { business: { include: { members: true } } },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const isAuthorized = product.business.members.some((m) => m.userId === userId);
+    if (!isAuthorized) {
+      throw new ForbiddenException('You are not authorized to edit this product');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      if (dto.images) {
+        await tx.productImage.deleteMany({ where: { productId } });
+        if (dto.images.length > 0) {
+          await tx.productImage.createMany({
+            data: dto.images.map((img: any, idx: number) => ({
+              productId,
+              url: img.url,
+              altText: img.altText || dto.name || product.name,
+              displayOrder: idx,
+              isPrimary: img.isPrimary ?? (idx === 0),
+            })),
+          });
+        }
+      }
+
+      if (dto.priceTiers) {
+        await tx.priceTier.deleteMany({ where: { productId } });
+        if (dto.priceTiers.length > 0) {
+          await tx.priceTier.createMany({
+            data: dto.priceTiers.map((pt: any) => ({
+              productId,
+              minQuantity: pt.minQuantity,
+              maxQuantity: pt.maxQuantity,
+              price: pt.price,
+            })),
+          });
+        }
+      }
+
+      return tx.product.update({
+        where: { id: productId },
+        data: {
+          name: dto.name,
+          description: dto.description,
+          categoryId: dto.categoryId,
+          minOrderQuantity: dto.minOrderQuantity !== undefined ? Number(dto.minOrderQuantity) : undefined,
+          unitOfMeasure: dto.unitOfMeasure,
+          unitPrice: dto.unitPrice !== undefined ? Number(dto.unitPrice) : undefined,
+          isB2B: dto.isB2B !== undefined ? Boolean(dto.isB2B) : undefined,
+          isB2C: dto.isB2C !== undefined ? Boolean(dto.isB2C) : undefined,
+          sku: dto.sku,
+          status: dto.status,
+          specifications: dto.specifications,
+        },
+        include: {
+          images: true,
+          priceTiers: true,
+          category: true,
+        },
+      });
+    });
+  }
+
+  async delete(productId: string, userId: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      include: { business: { include: { members: true } } },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const isAuthorized = product.business.members.some((m) => m.userId === userId);
+    if (!isAuthorized) {
+      throw new ForbiddenException('You are not authorized to delete this product');
+    }
+
+    return this.prisma.product.delete({
+      where: { id: productId },
+    });
+  }
+
+  async updateStatus(productId: string, userId: string, status: ProductStatus) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      include: { business: { include: { members: true } } },
+    });
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const isAuthorized = product.business.members.some((m) => m.userId === userId);
+    if (!isAuthorized) {
+      throw new ForbiddenException('You are not authorized to update this product status');
+    }
+
+    return this.prisma.product.update({
+      where: { id: productId },
+      data: { status },
+    });
+  }
+
+  async bulkImport(items: any[], userId: string, targetBusinessId?: string) {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new BadRequestException('Please provide a valid array of product rows to import.');
+    }
+
+    let bId = targetBusinessId;
+    if (!bId) {
+      const membership = await this.prisma.businessMember.findFirst({
+        where: { userId },
+      });
+      if (membership) {
+        bId = membership.businessId;
+      } else {
+        const firstBiz = await this.prisma.business.findFirst();
+        bId = firstBiz?.id;
+      }
+    }
+
+    if (!bId) {
+      throw new BadRequestException('No business storefront found to attach imported products.');
+    }
+
+    const categories = await this.prisma.category.findMany();
+    const defaultCatId = categories[0]?.id;
+
+    const created: any[] = [];
+    const errors: string[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const row = items[i];
+      if (!row.name || !String(row.name).trim()) {
+        errors.push(`Row ${i + 1}: Product name is required.`);
+        continue;
+      }
+
+      try {
+        const name = String(row.name).trim();
+        let slug = this.slugify(name);
+        const existing = await this.prisma.product.findUnique({ where: { slug } });
+        if (existing) {
+          slug = `${slug}-${Math.floor(1000 + Math.random() * 9000)}`;
+        }
+
+        // Match category
+        let matchedCatId = defaultCatId;
+        if (row.category) {
+          const catNameLower = String(row.category).toLowerCase().trim();
+          const found = categories.find((c) => c.name.toLowerCase() === catNameLower || c.slug === catNameLower);
+          if (found) matchedCatId = found.id;
+        } else if (row.categoryId) {
+          matchedCatId = row.categoryId;
+        }
+
+        const unitOfMeasure = (row.unitOfMeasure || 'PIECE').toUpperCase() as any;
+        const minOrderQuantity = Number(row.minOrderQuantity || 1);
+        const unitPrice = Number(row.unitPrice || 0);
+        const sku = row.sku ? String(row.sku).trim() : undefined;
+        const description = row.description ? String(row.description).trim() : `High-quality industrial ${name} manufactured as per standard Indian engineering specifications.`;
+        const imageUrl = row.imageUrl ? String(row.imageUrl).trim() : 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=800';
+
+        const p = await this.prisma.product.create({
+          data: {
+            businessId: bId,
+            categoryId: matchedCatId,
+            name,
+            slug,
+            sku,
+            description,
+            unitOfMeasure,
+            minOrderQuantity,
+            unitPrice,
+            isB2B: true,
+            isB2C: false,
+            status: ProductStatus.PUBLISHED,
+            specifications: {
+              Material: row.material || 'Standard Grade',
+              Brand: row.brand || 'OEM Industrial',
+              Warranty: row.warranty || '1 Year Manufacturer',
+            },
+            images: {
+              create: [
+                {
+                  url: imageUrl,
+                  altText: name,
+                  isPrimary: true,
+                  displayOrder: 0,
+                },
+              ],
+            },
+          },
+        });
+        created.push(p);
+      } catch (err: any) {
+        errors.push(`Row ${i + 1} (${row.name}): ${err.message}`);
+      }
+    }
+
+    return {
+      success: true,
+      importedCount: created.length,
+      totalSubmitted: items.length,
+      errors,
     };
   }
 }

@@ -13,10 +13,15 @@ import {
   Calendar,
   Send,
   Boxes,
+  MessageCircle,
+  Phone,
+  Award,
+  ExternalLink,
 } from 'lucide-react';
 import { fetchApi } from '../../../lib/api';
 import ProductCard from '../../../components/ProductCard';
 import InquiryModal from '../../../components/InquiryModal';
+import GSTINBreakdownModal from '../../../components/GSTINBreakdownModal';
 
 export default function StorefrontPage() {
   const params = useParams();
@@ -25,6 +30,7 @@ export default function StorefrontPage() {
   const [business, setBusiness] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
+  const [showGstinModal, setShowGstinModal] = useState(false);
 
   useEffect(() => {
     async function loadStore() {
@@ -128,6 +134,41 @@ export default function StorefrontPage() {
           </div>
         </div>
 
+        {/* Contact Actions Bar with WhatsApp & TrustSEAL */}
+        <div className="mt-6 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowGstinModal(true)}
+              className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <Award className="w-3.5 h-3.5 text-amber-600" />
+              <span>TrustSEAL & GSTIN Breakdown</span>
+            </button>
+            <span className="text-[11px] text-slate-500 font-mono hidden sm:inline">
+              GSTIN: <strong>{business.gstin || '24AAACA1234A1Z5'}</strong>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <a
+              href={`https://wa.me/919825012345?text=${encodeURIComponent(`Namaste ${business.name}! I am contacting you through your IndiaTrade public storefront.`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-[#25D366] hover:bg-[#20ba5a] text-slate-950 px-3.5 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition shadow-xs"
+            >
+              <MessageCircle className="w-4 h-4 text-slate-950" />
+              <span>WhatsApp Store</span>
+            </a>
+            <a
+              href="tel:+919825012345"
+              className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition shadow-xs"
+            >
+              <Phone className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Call: +91 98250 XXXXX</span>
+            </a>
+          </div>
+        </div>
+
         {/* Company Description */}
         {business.description && (
           <div className="mt-6 pt-6 border-t border-slate-100">
@@ -183,6 +224,19 @@ export default function StorefrontPage() {
         <InquiryModal
           product={selectedProduct}
           onClose={() => setSelectedProduct(null)}
+        />
+      )}
+
+      {/* GSTIN Breakdown Modal */}
+      {showGstinModal && (
+        <GSTINBreakdownModal
+          isOpen={showGstinModal}
+          onClose={() => setShowGstinModal(false)}
+          gstin={business.gstin}
+          businessName={business.name}
+          city={business.city}
+          state={business.state}
+          yearEstablished={business.yearEstablished}
         />
       )}
     </div>

@@ -14,10 +14,35 @@ import {
   Truck,
   FileText,
   BadgeCheck,
+  Layers,
+  MapPin,
+  TrendingUp,
+  Sparkles,
+  PhoneCall,
+  MessageSquare,
+  HelpCircle,
+  Check,
+  X,
 } from 'lucide-react';
 import { fetchApi } from '../lib/api';
 import ProductCard from '../components/ProductCard';
 import InquiryModal from '../components/InquiryModal';
+
+const MANUFACTURING_HUBS = [
+  { city: 'Ahmedabad', state: 'Gujarat', focus: 'CNC Machinery, Chemical Plants & Engineering', tag: 'Engineering Hub' },
+  { city: 'Surat', state: 'Gujarat', focus: 'Manmade Textiles, Cotton Weaving & Synthetic Yarns', tag: 'Textile Capital' },
+  { city: 'Delhi', state: 'NCR', focus: 'Industrial Hardware, Electricals & Packaging Supplies', tag: 'Wholesale Trade' },
+  { city: 'Mumbai', state: 'Maharashtra', focus: 'Bulk Chemicals, Export Goods & Polymers', tag: 'Commercial Center' },
+  { city: 'Bengaluru', state: 'Karnataka', focus: 'Precision Electronics, CNC Automation & Tech Tools', tag: 'Precision Tech' },
+  { city: 'Pune', state: 'Maharashtra', focus: 'Automotive Components, Heavy Castings & Forgings', tag: 'Automotive Hub' },
+];
+
+const RECENT_RFQS = [
+  { title: 'Need 500 Meters Pure Cotton Twill Fabric 120 GSM', city: 'Surat, Gujarat', qty: '500 Meters', time: '10 mins ago' },
+  { title: 'Requirement for 2 CNC Horizontal Lathe Machines 3000 RPM', city: 'Pune, Maharashtra', qty: '2 Units', time: '25 mins ago' },
+  { title: 'Urgent: Semi-Automatic Carton Box Strapping Machine', city: 'Delhi NCR', qty: '4 Sets', time: '40 mins ago' },
+  { title: 'Bulk Supply: Polyester Spun Yarn 150D for Loom Unit', city: 'Ahmedabad, Gujarat', qty: '1000 KG', time: '1 hour ago' },
+];
 
 export default function HomePage() {
   const [categories, setCategories] = useState<any[]>([]);
@@ -27,48 +52,54 @@ export default function HomePage() {
 
   useEffect(() => {
     async function loadData() {
-      // Fetch categories
-      const catRes = await fetchApi('/categories');
-      if (catRes.success && catRes.data) {
-        setCategories(catRes.data);
-      }
+      const [catRes, prodRes, bizRes] = await Promise.all([
+        fetchApi('/categories'),
+        fetchApi('/products/search?limit=12'),
+        fetchApi('/businesses?limit=4&verifiedOnly=true'),
+      ]);
 
-      // Fetch featured products
-      const prodRes = await fetchApi('/products/search?limit=8');
-      if (prodRes.success && prodRes.data?.data) {
-        setProducts(prodRes.data.data);
-      }
-
-      // Fetch verified businesses
-      const bizRes = await fetchApi('/businesses?limit=4&verifiedOnly=true');
-      if (bizRes.success && bizRes.data?.data) {
-        setBusinesses(bizRes.data.data);
-      }
+      if (catRes.success && catRes.data) setCategories(catRes.data);
+      if (prodRes.success && prodRes.data?.data) setProducts(prodRes.data.data);
+      if (bizRes.success && bizRes.data?.data) setBusinesses(bizRes.data.data);
     }
     loadData();
   }, []);
 
+  const machineryProducts = products.filter(
+    (p) =>
+      p.category?.slug === 'cnc-lathe-machines' ||
+      p.category?.slug === 'packaging-machinery' ||
+      p.category?.slug === 'industrial-machinery',
+  );
+
+  const textileProducts = products.filter(
+    (p) =>
+      p.category?.slug === 'cotton-fabrics' ||
+      p.category?.slug === 'industrial-yarns' ||
+      p.category?.slug === 'textiles-fabrics',
+  );
+
   return (
-    <div>
+    <div className="space-y-12 pb-12">
       {/* Hero Section */}
       <section className="bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white py-12 md:py-16">
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             {/* Left Content */}
             <div className="lg:col-span-7 space-y-4">
-              <div className="inline-flex items-center gap-2 bg-emerald-950/80 border border-emerald-700/60 text-emerald-400 text-xs px-3 py-1 rounded-full font-medium">
-                <ShieldCheck className="w-4 h-4" /> Free Marketplace • Zero Commission on Leads
+              <div className="inline-flex items-center gap-2 bg-emerald-950/80 border border-emerald-700/60 text-emerald-400 text-xs px-3.5 py-1 rounded-full font-medium shadow-sm">
+                <ShieldCheck className="w-4 h-4" /> 100% Free Marketplace • Zero Commission on Leads
               </div>
               <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight">
                 Connect Directly With India’s Top <span className="text-emerald-400">Manufacturers</span> & Wholesalers
               </h1>
-              <p className="text-slate-300 text-sm md:text-base max-w-xl">
-                Discover verified suppliers, request wholesale quotations, compare bulk prices, or purchase directly with Indian GSTIN transparency.
+              <p className="text-slate-300 text-xs md:text-sm max-w-xl leading-relaxed">
+                India’s free B2B & B2C marketplace. Discover verified Indian suppliers, request wholesale quotations, compare bulk prices, or contact verified GSTIN sellers with zero middlemen fees.
               </p>
 
               {/* Quick Category Badges */}
               <div className="pt-2 flex flex-wrap gap-2 text-xs">
-                <span className="text-slate-400 self-center">Popular:</span>
+                <span className="text-slate-400 self-center font-medium">Popular:</span>
                 <Link
                   href="/search?category=cnc-lathe-machines"
                   className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition"
@@ -99,29 +130,29 @@ export default function HomePage() {
             {/* Right Card: Post Buying Requirement Quick Box */}
             <div className="lg:col-span-5">
               <div className="bg-white text-slate-900 rounded-2xl p-6 shadow-2xl border border-slate-100">
-                <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm mb-1">
-                  <PlusCircle className="w-4 h-4 text-emerald-600" /> Post Buying Requirement (RFQ)
+                <div className="flex items-center gap-2 text-emerald-700 font-bold text-xs uppercase tracking-wider mb-1">
+                  <PlusCircle className="w-4 h-4 text-emerald-600" /> B2B Buying Requirement (RFQ)
                 </div>
                 <h3 className="text-lg font-bold text-slate-900">
                   Get Instant Quotes from Verified Suppliers
                 </h3>
                 <p className="text-xs text-slate-500 mt-1 mb-4">
-                  Tell us what product or machine you need. Verified Indian sellers will reach out with customized quotes.
+                  Tell us what machinery, fabric, or raw material you need. Verified Indian sellers will reach out with customized quotes.
                 </p>
 
                 <Link
                   href="/requirements/new"
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-xl text-center block text-sm transition shadow-sm"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-xl text-center block text-xs transition shadow-sm"
                 >
-                  Post Your Requirement for Free →
+                  Post Your Buying Requirement for Free →
                 </Link>
 
                 <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-3 text-center text-[11px] text-slate-500">
                   <div>
-                    <span className="font-bold text-slate-800 block text-xs">100% Free</span> No Hidden Costs
+                    <span className="font-bold text-slate-800 block text-xs">100% Free</span> Zero Paywalls
                   </div>
                   <div>
-                    <span className="font-bold text-slate-800 block text-xs">Direct Contact</span> No Middlemen
+                    <span className="font-bold text-slate-800 block text-xs">Direct Contact</span> WhatsApp / Calls
                   </div>
                   <div>
                     <span className="font-bold text-slate-800 block text-xs">Verified GST</span> Legitimate Sellers
@@ -133,91 +164,55 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Main Content Area */}
-      <div className="max-w-7xl mx-auto px-4 py-12 space-y-12">
-        {/* Categories Section */}
-        <section>
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-                Explore Top Industrial & Consumer Categories
-              </h2>
-              <p className="text-xs md:text-sm text-slate-500 mt-0.5">
-                Browse through verified Indian manufacturing sectors and supply chains.
-              </p>
-            </div>
-            <Link
-              href="/categories"
-              className="text-emerald-700 hover:text-emerald-800 text-xs md:text-sm font-semibold flex items-center gap-1 transition"
-            >
-              View All <ArrowRight className="w-4 h-4" />
-            </Link>
+      {/* Live Recent Buying Inquiries Ticker */}
+      <section className="max-w-7xl mx-auto px-4 -mt-6">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 font-bold text-emerald-900 flex-shrink-0">
+            <TrendingUp className="w-4 h-4 text-emerald-600" />
+            <span>Live Buyer Inquiries Across India:</span>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-6">
-            {categories.map((cat) => (
-              <div
-                key={cat.id}
-                className="bg-white border border-slate-200 rounded-xl p-5 hover:shadow-md transition group"
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition">
-                    <Cpu className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <Link
-                      href={`/search?category=${cat.slug}`}
-                      className="font-bold text-slate-900 text-sm hover:text-emerald-700 transition"
-                    >
-                      {cat.name}
-                    </Link>
-                    <div className="text-[11px] text-slate-500">{cat.productCount || 0} Products Listed</div>
-                  </div>
-                </div>
-
-                <p className="text-xs text-slate-600 line-clamp-2 mb-3">
-                  {cat.description || 'Verified industrial supplies and wholesale catalogue.'}
-                </p>
-
-                {cat.children && cat.children.length > 0 && (
-                  <div className="border-t border-slate-100 pt-3 flex flex-wrap gap-1.5">
-                    {cat.children.map((sub: any) => (
-                      <Link
-                        key={sub.id}
-                        href={`/search?category=${sub.slug}`}
-                        className="text-[11px] bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 px-2 py-0.5 rounded transition"
-                      >
-                        {sub.name}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
+          <div className="flex flex-wrap items-center gap-4 text-slate-700 text-xs">
+            {RECENT_RFQS.slice(0, 2).map((rfq, i) => (
+              <span key={i} className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-md border border-emerald-200/60 shadow-xs">
+                <span className="font-medium text-slate-800 truncate max-w-xs">{rfq.title}</span>
+                <span className="text-[10px] text-slate-400">({rfq.city})</span>
+              </span>
             ))}
           </div>
-        </section>
+          <Link
+            href="/requirements/new"
+            className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 flex-shrink-0"
+          >
+            Post Your RFQ <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      </section>
 
-        {/* Featured Products */}
-        <section>
-          <div className="flex items-center justify-between mb-6">
+      <div className="max-w-7xl mx-auto px-4 space-y-12">
+        {/* Curated Section 1: Industrial Machinery & Plants */}
+        <section className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6 border-b border-slate-100 pb-4">
             <div>
+              <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <Cpu className="w-3.5 h-3.5" /> Industrial Manufacturing Equipment
+              </div>
               <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
-                Recently Added Products & Wholesale Catalogues
+                Industrial Machinery, CNC Lathes & Packaging Plants
               </h2>
-              <p className="text-xs md:text-sm text-slate-500 mt-0.5">
-                Direct factory prices with transparent minimum order quantities (MOQ).
+              <p className="text-xs text-slate-500 mt-0.5">
+                Precision machine tools, automated cartooning, and heavy engineering equipment direct from factories.
               </p>
             </div>
             <Link
-              href="/search"
-              className="text-emerald-700 hover:text-emerald-800 text-xs md:text-sm font-semibold flex items-center gap-1 transition"
+              href="/search?category=industrial-machinery"
+              className="text-emerald-700 hover:text-emerald-800 font-semibold text-xs flex items-center gap-1 flex-shrink-0"
             >
-              Browse Catalogue <ArrowRight className="w-4 h-4" />
+              View All Machinery <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {products.map((prod) => (
+            {(machineryProducts.length > 0 ? machineryProducts : products.slice(0, 4)).map((prod) => (
               <ProductCard
                 key={prod.id}
                 product={prod}
@@ -227,7 +222,149 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Verified Suppliers Showcase */}
+        {/* Curated Section 2: Textiles, Cotton Fabrics & Yarns */}
+        <section className="bg-white border border-slate-200 rounded-2xl p-6 md:p-8 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6 border-b border-slate-100 pb-4">
+            <div>
+              <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <Shirt className="w-3.5 h-3.5" /> Bulk Apparel & Fabric Mill Hub
+              </div>
+              <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
+                Textiles, Organic Cotton Fabrics & Industrial Yarns
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Surat and Ahmedabad textile mills with wholesale tier discounts and export-grade certifications.
+              </p>
+            </div>
+            <Link
+              href="/search?category=textiles-fabrics"
+              className="text-emerald-700 hover:text-emerald-800 font-semibold text-xs flex items-center gap-1 flex-shrink-0"
+            >
+              View All Textiles <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {(textileProducts.length > 0 ? textileProducts : products.slice(0, 4)).map((prod) => (
+              <ProductCard
+                key={prod.id}
+                product={prod}
+                onContactSupplier={(p) => setSelectedProduct(p)}
+              />
+            ))}
+          </div>
+        </section>
+
+        {/* Key Indian Manufacturing Hubs & Industrial Clusters */}
+        <section>
+          <div className="mb-6">
+            <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-emerald-600" /> Major Indian Trade Hubs & Industrial Clusters
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Source directly from specialized regional manufacturing belts across India.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+            {MANUFACTURING_HUBS.map((hub) => (
+              <Link
+                key={hub.city}
+                href={`/search?city=${hub.city}`}
+                className="bg-white border border-slate-200 rounded-xl p-5 hover:border-emerald-500 hover:shadow-md transition group"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-slate-900 text-sm group-hover:text-emerald-700 transition">
+                    {hub.city}, {hub.state}
+                  </span>
+                  <span className="bg-emerald-50 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded">
+                    {hub.tag}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed mb-3">
+                  {hub.focus}
+                </p>
+                <div className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
+                  Browse {hub.city} Suppliers <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {/* Why IndiaTrade Free Marketplace Comparison Box */}
+        <section className="bg-slate-900 text-white rounded-2xl p-6 md:p-10 shadow-lg">
+          <div className="max-w-3xl mb-8 space-y-2">
+            <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+              <ShieldCheck className="w-4 h-4" /> The Free Marketplace Pledge
+            </div>
+            <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">
+              Why Indian Businesses Choose IndiaTrade Over Paid Lead Portals
+            </h2>
+            <p className="text-xs md:text-sm text-slate-300 leading-relaxed">
+              Traditional B2B directories charge ₹25,000 to ₹1,00,000 per year and force sellers to purchase "lead credits" just to see buyer mobile numbers. IndiaTrade is committed to 100% free inquiry delivery.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto bg-slate-800/80 rounded-xl border border-slate-700">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-800 text-slate-300 border-b border-slate-700">
+                <tr>
+                  <th className="py-3 px-4 font-semibold">Feature / Capability</th>
+                  <th className="py-3 px-4 font-semibold text-rose-400">Traditional Paid Portals</th>
+                  <th className="py-3 px-4 font-bold text-emerald-400">IndiaTrade Marketplace</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700/60">
+                <tr>
+                  <td className="py-3 px-4 font-semibold text-white">Cost per Buyer Lead / Inquiry</td>
+                  <td className="py-3 px-4 text-slate-400">₹200 to ₹500 per lead consumed</td>
+                  <td className="py-3 px-4 font-bold text-emerald-400 flex items-center gap-1">
+                    <Check className="w-4 h-4" /> ₹0 (100% Free Forever)
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-3 px-4 font-semibold text-white">Buyer Contact Details (Phone & WhatsApp)</td>
+                  <td className="py-3 px-4 text-slate-400">Masked behind paid credit barrier</td>
+                  <td className="py-3 px-4 font-bold text-emerald-400 flex items-center gap-1">
+                    <Check className="w-4 h-4" /> Direct 1-Click WhatsApp & Calling
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-3 px-4 font-semibold text-white">Annual Membership Fees</td>
+                  <td className="py-3 px-4 text-slate-400">₹25,000 - ₹1,50,000 mandatory subscription</td>
+                  <td className="py-3 px-4 font-bold text-emerald-400 flex items-center gap-1">
+                    <Check className="w-4 h-4" /> ₹0 Free Storefront & Unlimited Catalog
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-3 px-4 font-semibold text-white">In-App Live Chat & Quotation Negotiation</td>
+                  <td className="py-3 px-4 text-slate-400">Limited or requires paid tier</td>
+                  <td className="py-3 px-4 font-bold text-emerald-400 flex items-center gap-1">
+                    <Check className="w-4 h-4" /> Built-in Direct Chat & CRM Pipeline
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/register"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition shadow-sm"
+            >
+              Register Your Business 100% Free
+            </Link>
+            <Link
+              href="/requirements/new"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs px-5 py-2.5 rounded-xl transition"
+            >
+              Post Buyer Requirement (RFQ)
+            </Link>
+          </div>
+        </section>
+
+        {/* Featured Verified Suppliers Showcase */}
         <section className="bg-slate-100/70 border border-slate-200 rounded-2xl p-6 md:p-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
@@ -238,7 +375,7 @@ export default function HomePage() {
                 Featured Verified Suppliers & Manufacturers
               </h2>
               <p className="text-xs md:text-sm text-slate-600 mt-0.5">
-                Suppliers with confirmed GSTIN and active response records.
+                Suppliers with confirmed 15-digit GSTIN and active lead response records.
               </p>
             </div>
             <Link
@@ -303,32 +440,6 @@ export default function HomePage() {
             ))}
           </div>
         </section>
-
-        {/* Free Marketplace Manifesto Banner */}
-        <section className="bg-gradient-to-r from-emerald-800 to-teal-900 text-white rounded-2xl p-8 md:p-10 shadow-lg">
-          <div className="max-w-3xl space-y-3">
-            <h3 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-              A Truly Free Indian B2B & B2C Marketplace
-            </h3>
-            <p className="text-slate-200 text-xs md:text-sm leading-relaxed">
-              We believe Indian MSMEs, manufacturers, and traders shouldn’t be forced into costly lead subscription traps. On IndiaTrade, buyers post buying requirements for free, and suppliers receive inquiries directly without paying for lead unlocks.
-            </p>
-            <div className="pt-2 flex flex-wrap gap-3">
-              <Link
-                href="/register"
-                className="bg-white text-emerald-900 hover:bg-slate-100 font-bold px-5 py-2.5 rounded-lg text-xs transition"
-              >
-                Register as Free Seller
-              </Link>
-              <Link
-                href="/requirements/new"
-                className="bg-emerald-950/60 hover:bg-emerald-950 text-white font-bold px-5 py-2.5 rounded-lg text-xs border border-emerald-400/30 transition"
-              >
-                Post Buying RFQ
-              </Link>
-            </div>
-          </div>
-        </section>
       </div>
 
       {/* Inquiry Modal */}
@@ -341,4 +452,3 @@ export default function HomePage() {
     </div>
   );
 }
-

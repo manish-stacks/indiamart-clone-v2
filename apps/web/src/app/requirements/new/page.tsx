@@ -34,14 +34,34 @@ export default function PostRequirementPage() {
     getCategories();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      router.push('/login?redirect=/requirements/new');
+      return;
+    }
+
     setLoading(true);
-    // In Phase 1 foundation: record requirement submission cleanly
-    setTimeout(() => {
-      setLoading(false);
+    const res = await fetchApi('/requirements', {
+      method: 'POST',
+      body: JSON.stringify({
+        title,
+        categoryId,
+        quantity: Number(quantity),
+        unitOfMeasure,
+        targetPrice: targetPrice ? Number(targetPrice) : undefined,
+        deliveryCity: deliveryCity || 'All India',
+        deliveryState: deliveryState || '',
+        description,
+      }),
+    });
+
+    if (res.success) {
       setSubmitted(true);
-    }, 700);
+    } else {
+      alert(res.message || 'Failed to publish requirement');
+    }
+    setLoading(false);
   };
 
   return (

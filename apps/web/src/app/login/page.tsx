@@ -28,7 +28,15 @@ export default function LoginPage() {
 
     if (res.success && res.data) {
       login(res.data.accessToken, res.data.user);
-      router.push('/');
+      const redirectUrl = new URLSearchParams(window.location.search).get('redirect');
+      const isAdminUser = res.data.user?.roles?.some((r: any) => r === 'ADMIN' || r === 'SUPER_ADMIN');
+      if (redirectUrl) {
+        router.push(redirectUrl);
+      } else if (isAdminUser) {
+        router.push('/admin');
+      } else {
+        router.push('/dashboard');
+      }
     } else {
       setError(res.message || 'Invalid email or password');
     }

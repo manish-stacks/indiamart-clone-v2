@@ -129,6 +129,11 @@ export default function Footer() {
               </Link>
             </li>
             <li>
+              <Link href="/admin" className="text-amber-400 hover:text-amber-300 font-semibold">
+                Super Admin Console
+              </Link>
+            </li>
+            <li>
               <Link href="/help" className="hover:text-emerald-400 transition">
                 Help Center & FAQs
               </Link>

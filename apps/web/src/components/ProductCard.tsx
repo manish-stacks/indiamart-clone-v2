@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { MapPin, ShieldCheck, CheckCircle2, ChevronRight } from 'lucide-react';
+import { MapPin, ShieldCheck, CheckCircle2, ChevronRight, MessageCircle } from 'lucide-react';
 
 interface ProductCardProps {
   product: {
@@ -109,14 +109,24 @@ export default function ProductCard({ product, onContactSupplier }: ProductCardP
       </div>
 
       {/* Action Buttons */}
-      <div className="p-4 pt-0">
+      <div className="p-4 pt-0 grid grid-cols-5 gap-2">
         <button
           onClick={() => (onContactSupplier ? onContactSupplier(product) : window.location.assign(`/products/${product.slug}`))}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1 transition"
+          className="col-span-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 px-3 rounded-lg flex items-center justify-center gap-1 transition shadow-xs"
         >
           <span>Contact Supplier</span>
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
+
+        <a
+          href={`https://wa.me/919825012345?text=${encodeURIComponent(`Namaste! I am interested in "${product.name}" on IndiaTrade.`)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="col-span-1 bg-[#25D366] hover:bg-[#20ba5a] text-slate-950 rounded-lg flex items-center justify-center transition shadow-xs"
+          title="Direct WhatsApp Inquiry"
+        >
+          <MessageCircle className="w-4 h-4 text-slate-950" />
+        </a>
       </div>
     </div>
   );

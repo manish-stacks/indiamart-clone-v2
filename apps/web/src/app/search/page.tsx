@@ -39,6 +39,9 @@ function SearchContent() {
   const [verifiedOnly, setVerifiedOnly] = useState(verifiedOnlyParam);
   const [tradeType, setTradeType] = useState(tradeTypeParam);
   const [sortBy, setSortBy] = useState(sortByParam);
+  const [minPrice, setMinPrice] = useState<string>('');
+  const [maxPrice, setMaxPrice] = useState<string>('');
+  const [moqFilter, setMoqFilter] = useState<string>('ALL');
 
   useEffect(() => {
     async function executeSearch() {
@@ -82,8 +85,30 @@ function SearchContent() {
     setVerifiedOnly(false);
     setTradeType('');
     setSortBy('');
+    setMinPrice('');
+    setMaxPrice('');
+    setMoqFilter('ALL');
     router.push('/search');
   };
+
+  const filteredProducts = products
+    .filter((p) => {
+      if (minPrice && Number(p.unitPrice) < Number(minPrice)) return false;
+      if (maxPrice && Number(p.unitPrice) > Number(maxPrice)) return false;
+      if (moqFilter === 'RETAIL_1_5' && Number(p.minOrderQuantity || 1) > 5) return false;
+      if (
+        moqFilter === 'WHOLESALE_10_50' &&
+        (Number(p.minOrderQuantity || 1) < 10 || Number(p.minOrderQuantity || 1) > 50)
+      )
+        return false;
+      if (moqFilter === 'BULK_100' && Number(p.minOrderQuantity || 1) < 100) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === 'price_asc') return Number(a.unitPrice) - Number(b.unitPrice);
+      if (sortBy === 'price_desc') return Number(b.unitPrice) - Number(a.unitPrice);
+      return 0;
+    });
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -106,6 +131,32 @@ function SearchContent() {
         <p className="text-xs text-slate-500 mt-1">
           Showing {totalCount} verified products from Indian manufacturers, wholesalers, and exporters.
         </p>
+
+        {/* City Quick Filter Chips */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pt-4 text-xs">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mr-1 flex-shrink-0">
+            <MapPin className="w-3.5 h-3.5 text-emerald-600" /> Hubs:
+          </span>
+          {POPULAR_CITIES.map((c) => (
+            <button
+              key={c}
+              onClick={() => {
+                setCity(c);
+                const params = new URLSearchParams(searchParams.toString());
+                if (c === 'All India') params.delete('city');
+                else params.set('city', c);
+                router.push(`/search?${params.toString()}`);
+              }}
+              className={`px-3 py-1 rounded-full font-semibold transition whitespace-nowrap text-xs ${
+                (cityParam === c || (c === 'All India' && !cityParam))
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -192,6 +243,71 @@ function SearchContent() {
               </div>
             </div>
 
+            {/* Price Range Filter */}
+            <div className="pt-2 border-t border-slate-100">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Price Range (₹)</label>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <input
+                  type="number"
+                  placeholder="₹ Min"
+                  value={minPrice}
+                  onChange={(e) => setMinPrice(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                />
+                <input
+                  type="number"
+                  placeholder="₹ Max"
+                  value={maxPrice}
+                  onChange={(e) => setMaxPrice(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                />
+              </div>
+              <div className="flex flex-wrap gap-1 text-[10px]">
+                {[
+                  { label: '< ₹5k', min: '', max: '5000' },
+                  { label: '₹5k-50k', min: '5000', max: '50000' },
+                  { label: '₹50k-5L', min: '50000', max: '500000' },
+                  { label: '₹5L+', min: '500000', max: '' },
+                ].map((chip, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setMinPrice(chip.min);
+                      setMaxPrice(chip.max);
+                    }}
+                    className="bg-slate-100 hover:bg-emerald-50 hover:text-emerald-800 px-2 py-0.5 rounded text-slate-600 transition"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Minimum Order Quantity (MOQ) Filter */}
+            <div className="pt-2 border-t border-slate-100">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Minimum Order Quantity (MOQ)</label>
+              <div className="space-y-1.5 text-xs">
+                {[
+                  { label: 'Any MOQ', value: 'ALL' },
+                  { label: 'Retail (1 - 5 units)', value: 'RETAIL_1_5' },
+                  { label: 'Wholesale (10 - 50 units)', value: 'WHOLESALE_10_50' },
+                  { label: 'Bulk Industrial (100+ units)', value: 'BULK_100' },
+                ].map((item) => (
+                  <label key={item.value} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="moqFilter"
+                      checked={moqFilter === item.value}
+                      onChange={() => setMoqFilter(item.value)}
+                      className="text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>{item.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             {/* Verification Checkbox */}
             <div className="pt-2 border-t border-slate-100">
               <label className="flex items-center gap-2 text-xs font-medium text-slate-800 cursor-pointer">
@@ -244,9 +360,9 @@ function SearchContent() {
                 </div>
               ))}
             </div>
-          ) : products.length > 0 ? (
+          ) : filteredProducts.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {products.map((p) => (
+              {filteredProducts.map((p) => (
                 <ProductCard
                   key={p.id}
                   product={p}

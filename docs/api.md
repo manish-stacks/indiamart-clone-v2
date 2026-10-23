@@ -60,3 +60,10 @@ All API responses follow a uniform envelop structure:
 | `GET` | `/products/:slug` | Get product details, bulk price tiers, and seller card | Public |
 | `POST` | `/products` | Create product listing with images and price tiers | Business Owner/Manager |
 
+### 3.5 Inquiries & Leads (`/inquiries`)
+| Method | Path | Description | Access |
+|---|---|---|---|
+| `POST` | `/inquiries` | Submit buyer inquiry (auto-resolves buyer or captures guest name/phone/email, creates CRM lead) | Public / Authenticated |
+| `GET` | `/inquiries/my` | Get inquiries submitted by current buyer | Authenticated Buyer |
+| `GET` | `/inquiries/business/:businessId` | Get inquiries & leads received by supplier business | Business Owner/Staff |
+

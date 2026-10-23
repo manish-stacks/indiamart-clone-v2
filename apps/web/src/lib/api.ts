@@ -11,9 +11,9 @@ export async function fetchApi<T = any>(
     headers.set('Content-Type', 'application/json');
   }
 
-  // Retrieve token from client local storage if available
+  // Retrieve token: sessionStorage takes priority (for per-tab impersonation), then localStorage
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     if (token && !headers.has('Authorization')) {
       headers.set('Authorization', `Bearer ${token}`);
     }

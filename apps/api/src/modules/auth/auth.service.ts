@@ -66,7 +66,16 @@ export class AuthService {
       },
     });
 
-    return this.generateTokens(user.id, user.email, [role.name]);
+    return this.generateTokens(
+      user.id,
+      user.email,
+      [role.name],
+      undefined,
+      undefined,
+      user.fullName,
+      user.phone,
+      [],
+    );
   }
 
   async login(dto: LoginDto, userAgent?: string, ipAddress?: string) {
@@ -75,6 +84,20 @@ export class AuthService {
       include: {
         roles: {
           include: { role: true },
+        },
+        businessMembers: {
+          include: {
+            business: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                businessType: true,
+                verificationStatus: true,
+                gstinVerified: true,
+              },
+            },
+          },
         },
       },
     });
@@ -92,8 +115,29 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password credentials');
     }
 
-    const roles = user.roles.map((r) => r.role.name);
-    return this.generateTokens(user.id, user.email, roles, userAgent, ipAddress);
+    const roles: string[] = (user.roles || []).map((r: any) =>
+      typeof r === 'string' ? r : (r.role?.name || r.name || ''),
+    );
+    const businessMemberships = (user.businessMembers || []).map((bm) => ({
+      businessId: bm.businessId,
+      businessName: bm.business?.name || '',
+      businessSlug: bm.business?.slug || '',
+      businessType: bm.business?.businessType || '',
+      role: bm.role,
+      verificationStatus: bm.business?.verificationStatus || '',
+      gstinVerified: bm.business?.gstinVerified || false,
+    }));
+
+    return this.generateTokens(
+      user.id,
+      user.email,
+      roles,
+      userAgent,
+      ipAddress,
+      user.fullName,
+      user.phone,
+      businessMemberships,
+    );
   }
 
   async refreshToken(refreshToken: string) {
@@ -118,6 +162,20 @@ export class AuthService {
         where: { id: payload.sub },
         include: {
           roles: { include: { role: true } },
+          businessMembers: {
+            include: {
+              business: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  businessType: true,
+                  verificationStatus: true,
+                  gstinVerified: true,
+                },
+              },
+            },
+          },
         },
       });
 
@@ -125,11 +183,32 @@ export class AuthService {
         throw new UnauthorizedException('User not found');
       }
 
-      const roles = user.roles.map((r) => r.role.name);
+      const roles: string[] = (user.roles || []).map((r: any) =>
+      typeof r === 'string' ? r : (r.role?.name || r.name || ''),
+    );
+      const businessMemberships = (user.businessMembers || []).map((bm) => ({
+        businessId: bm.businessId,
+        businessName: bm.business?.name || '',
+        businessSlug: bm.business?.slug || '',
+        businessType: bm.business?.businessType || '',
+        role: bm.role,
+        verificationStatus: bm.business?.verificationStatus || '',
+        gstinVerified: bm.business?.gstinVerified || false,
+      }));
+
       // Invalidate existing session
       await this.prisma.session.delete({ where: { id: session.id } });
 
-      return this.generateTokens(user.id, user.email, roles);
+      return this.generateTokens(
+        user.id,
+        user.email,
+        roles,
+        undefined,
+        undefined,
+        user.fullName,
+        user.phone,
+        businessMemberships,
+      );
     } catch (err) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
@@ -189,12 +268,66 @@ export class AuthService {
     };
   }
 
+  async generateImpersonationToken(targetUserId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      include: {
+        roles: { include: { role: true } },
+        businessMembers: {
+          include: {
+            business: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                businessType: true,
+                verificationStatus: true,
+                gstinVerified: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Target user not found for impersonation');
+    }
+
+    const roles: string[] = (user.roles || []).map((r: any) =>
+      typeof r === 'string' ? r : (r.role?.name || r.name || ''),
+    );
+    const businessMemberships = (user.businessMembers || []).map((bm) => ({
+      businessId: bm.businessId,
+      businessName: bm.business?.name || '',
+      businessSlug: bm.business?.slug || '',
+      businessType: bm.business?.businessType || '',
+      role: bm.role,
+      verificationStatus: bm.business?.verificationStatus || '',
+      gstinVerified: bm.business?.gstinVerified || false,
+    }));
+
+    return this.generateTokens(
+      user.id,
+      user.email,
+      roles,
+      'admin-impersonation',
+      '127.0.0.1',
+      user.fullName,
+      user.phone,
+      businessMemberships,
+    );
+  }
+
   private async generateTokens(
     userId: string,
     email: string,
     roles: string[],
     userAgent?: string,
     ipAddress?: string,
+    fullName?: string,
+    phone?: string,
+    businessMemberships?: any[],
   ) {
     const payload = { sub: userId, email, roles };
 
@@ -229,7 +362,10 @@ export class AuthService {
       user: {
         id: userId,
         email,
+        fullName: fullName || email.split('@')[0],
+        phone: phone || null,
         roles,
+        businessMemberships: businessMemberships || [],
       },
       accessToken,
       refreshToken,
@@ -237,4 +373,3 @@ export class AuthService {
     };
   }
 }
-
